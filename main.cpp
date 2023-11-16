@@ -11,7 +11,7 @@
 #define N   50          // number of timesteps
 
 #define NUM_INPUTS (14 + 8*(N+1) + 3*N)       // TODO: make correct values
-#define NUM_OUTPUTS 17
+#define NUM_OUTPUTS 20
                                   // TODO
 #define PULSE_TO_RAD (2.0f*3.14159f / 1200.0f)
 
@@ -372,6 +372,10 @@ int main(void) {
                 output_data[14] = q4_des[t_idx];
                 output_data[15] = velocity4; 
                 output_data[16] = dq4_des[t_idx];
+                // control inputs
+                output_data[17] = current2; // TODO convert to torques
+                output_data[18] = current3;
+                output_data[19] = current4;
                 
                 // Send data to MATLAB
                 server.sendData(output_data,NUM_OUTPUTS);
