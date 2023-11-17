@@ -11,7 +11,7 @@
 #define N   50          // number of timesteps
 
 #define NUM_INPUTS (14 + 8*(N+1) + 3*N)       // TODO: make correct values
-#define NUM_OUTPUTS 20
+#define NUM_OUTPUTS 23
                                   // TODO
 #define PULSE_TO_RAD (2.0f*3.14159f / 1200.0f)
 
@@ -177,9 +177,9 @@ int main(void) {
     float dq2_des[N+1];
     float dq3_des[N+1];
     float dq4_des[N+1];
-    float tau1_des[N];
     float tau2_des[N];
     float tau3_des[N];
+    float tau4_des[N];
     
     // Link the terminal with our server and start it up
     server.attachTerminal(pc);
@@ -222,9 +222,9 @@ int main(void) {
               dq4_des[i] = input_params[14+7*(N+1)+i];
 
               if(i < N){
-                tau1_des[i] = input_params[14+8*(N+1)+i];
-                tau2_des[i] = input_params[14+6*(N+1)+N+i];
-                tau3_des[i] = input_params[14+6*(N+1)+2*N+i];
+                tau2_des[i] = input_params[14+8*(N+1)+i];
+                tau3_des[i] = input_params[14+6*(N+1)+N+i];
+                tau4_des[i] = input_params[14+6*(N+1)+2*N+i];
               }    
             }
             
@@ -343,9 +343,9 @@ int main(void) {
                 // Your equations should be of the form i_d = K1*(q1_d - q1) + D1*(dq1_d - dq1)
 
                 // TODO ta med feed forward torques, align tidsstegene
-                float tau2 = K_2*e_q2 + D_2*e_dq2; // + tau2_des          
-                float tau3 = K_3*e_q3 + D_3*e_dq3; // + tau3_des          
-                float tau4 = K_4*e_q4 + D_4*e_dq4; // + tau4_des
+                float tau2 = K_2*e_q2 + D_2*e_dq2; // + tau2_des[t_idx]          
+                float tau3 = K_3*e_q3 + D_3*e_dq3; // + tau3_des[t_idx]          
+                float tau4 = K_4*e_q4 + D_4*e_dq4; // + tau4_des[t_idx]
 
                 current2 = k_t*tau2;
                 current3 = k_t*tau3;          
@@ -382,7 +382,10 @@ int main(void) {
                 // control inputs
                 output_data[17] = tau2; 
                 output_data[18] = tau3; 
-                output_data[19] = tau4; 
+                output_data[19] = tau4;
+                output_data[20] = tau2_des[t_idx]; 
+                output_data[21] = tau3_des[t_idx]; 
+                output_data[22] = tau4_des[t_idx]; 
                 
                 // Send data to MATLAB
                 server.sendData(output_data,NUM_OUTPUTS);
