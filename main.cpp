@@ -343,11 +343,18 @@ int main(void) {
                 // Your equations should be of the form i_d = K1*(q1_d - q1) + D1*(dq1_d - dq1)
 
                 // TODO ta med feed forward torques, align tidsstegene
-                current_des2 = K_2*e_q2 + D_2*e_dq2;          
-                current_des3 = K_3*e_q3 + D_3*e_dq3;          
-                current_des4 = K_4*e_q4 + D_4*e_dq4;          
-                                         
+                float tau2 = K_2*e_q2 + D_2*e_dq2; // + tau2_des          
+                float tau3 = K_3*e_q3 + D_3*e_dq3; // + tau3_des          
+                float tau4 = K_4*e_q4 + D_4*e_dq4; // + tau4_des
+
+                current2 = k_t*tau2;
+                current3 = k_t*tau3;          
+                current4 = k_t*tau4;                         
+
+
                 
+
+
                 // Form output to send to MATLAB     
                 float output_data[NUM_OUTPUTS];
                 // current time
@@ -373,9 +380,9 @@ int main(void) {
                 output_data[15] = velocity4; 
                 output_data[16] = dq4_des[t_idx];
                 // control inputs
-                output_data[17] = current2; // TODO convert to torques
-                output_data[18] = current3;
-                output_data[19] = current4;
+                output_data[17] = tau2; 
+                output_data[18] = tau3; 
+                output_data[19] = tau4; 
                 
                 // Send data to MATLAB
                 server.sendData(output_data,NUM_OUTPUTS);
