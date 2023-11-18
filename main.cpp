@@ -8,11 +8,10 @@
 
 
 #define dt  0.01        // length of timestep
-#define N   50          // number of timesteps
+#define N   10          // number of timesteps
 
-#define NUM_INPUTS (14 + 8*(N+1) + 3*N)       // TODO: make correct values
-#define NUM_OUTPUTS 23
-                                  // TODO
+#define NUM_INPUTS 14 + 8*(N+1) //+ 3*N)       
+#define NUM_OUTPUTS 20 // 23
 #define PULSE_TO_RAD (2.0f*3.14159f / 1200.0f)
 
 // Initializations
@@ -177,9 +176,9 @@ int main(void) {
     float dq2_des[N+1];
     float dq3_des[N+1];
     float dq4_des[N+1];
-    float tau2_des[N];
-    float tau3_des[N];
-    float tau4_des[N];
+    // float tau2_des[N];
+    // float tau3_des[N];
+    // float tau4_des[N];
     
     // Link the terminal with our server and start it up
     server.attachTerminal(pc);
@@ -192,7 +191,7 @@ int main(void) {
     while(1) {
         // If there are new inputs, this code will run
         if (server.getParams(input_params,NUM_INPUTS)) {          
-            // Get inputs from MATLAB          
+            // Get inputs from MATLAB   
             start_period                = input_params[0];      // First buffer time, before trajectory
             traj_period                 = input_params[1];      // Trajectory time/length
             end_period                  = input_params[2];      // Second buffer time, after trajectory
@@ -221,11 +220,11 @@ int main(void) {
               dq3_des[i] = input_params[14+6*(N+1)+i]; 
               dq4_des[i] = input_params[14+7*(N+1)+i];
 
-              if(i < N){
-                tau2_des[i] = input_params[14+8*(N+1)+i];
-                tau3_des[i] = input_params[14+6*(N+1)+N+i];
-                tau4_des[i] = input_params[14+6*(N+1)+2*N+i];
-              }    
+            //   if(i < N){
+            //     tau2_des[i] = input_params[14+8*(N+1)+i];
+            //     tau3_des[i] = input_params[14+6*(N+1)+N+i];
+            //     tau4_des[i] = input_params[14+6*(N+1)+2*N+i];
+            //   }    
             }
             
             
@@ -240,7 +239,7 @@ int main(void) {
             encoderC.reset();
             encoderD.reset();
 
-            motorShield.motorAWrite(0, 0); //turn motor A off
+            motorShield.motorAWrite(duty_max, 1); //turn motor A off
             motorShield.motorBWrite(0, 0); //turn motor B off
             motorShield.motorCWrite(0, 0); //turn motor C off
                          
@@ -383,9 +382,9 @@ int main(void) {
                 output_data[17] = tau2; 
                 output_data[18] = tau3; 
                 output_data[19] = tau4;
-                output_data[20] = tau2_des[t_idx]; 
-                output_data[21] = tau3_des[t_idx]; 
-                output_data[22] = tau4_des[t_idx]; 
+                // output_data[20] = tau2_des[t_idx]; 
+                // output_data[21] = tau3_des[t_idx]; 
+                // output_data[22] = tau4_des[t_idx]; 
                 
                 // Send data to MATLAB
                 server.sendData(output_data,NUM_OUTPUTS);
