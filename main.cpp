@@ -8,10 +8,11 @@
 
 
 #define dt  0.01        // length of timestep
-#define N   10          // number of timesteps
+#define N   18          // number of timesteps
 
-#define NUM_INPUTS 14 + 8*(N+1) //+ 3*N)       
-#define NUM_OUTPUTS 20 // 23
+#define Nz 3           // number of controllable generalized coordinates (q2 - q4)
+#define NUM_INPUTS 14 + Nz*2*(N+1) //+ 3*N)       
+#define NUM_OUTPUTS 18 // 23
 #define PULSE_TO_RAD (2.0f*3.14159f / 1200.0f)
 
 // Initializations
@@ -161,18 +162,18 @@ void CurrentLoop() {
         motorShield.motorCWrite(absDuty4, 0);
     }             
     prev_current_des4 = current_des4; 
-    
 }
 
 
 
 int main(void) {
+    pc.baud(115200);
     // Object for desired trajectory of all angles
-    float q1_des[N+1];
+    //float q1_des[N+1];
     float q2_des[N+1];
     float q3_des[N+1];
     float q4_des[N+1];
-    float dq1_des[N+1];
+    //float dq1_des[N+1];
     float dq2_des[N+1];
     float dq3_des[N+1];
     float dq4_des[N+1];
@@ -190,7 +191,8 @@ int main(void) {
     
     while(1) {
         // If there are new inputs, this code will run
-        if (server.getParams(input_params,NUM_INPUTS)) {          
+        if (server.getParams(input_params,NUM_INPUTS)) {   
+            pc.printf("Receiving inputs\n");       
             // Get inputs from MATLAB   
             start_period                = input_params[0];      // First buffer time, before trajectory
             traj_period                 = input_params[1];      // Trajectory time/length
@@ -211,22 +213,22 @@ int main(void) {
           
             // Get desired angles and angular velocities
             for(int i = 0; i<N+1;i++) {
-              q1_des[i] = input_params[14+i];
-              q2_des[i] = input_params[14+(N+1)+i];
-              q3_des[i] = input_params[14+2*(N+1)+i]; 
-              q4_des[i] = input_params[14+3*(N+1)+i]; 
-              dq1_des[i] = input_params[14+4*(N+1)+i]; 
-              dq2_des[i] = input_params[14+5*(N+1)+i]; 
-              dq3_des[i] = input_params[14+6*(N+1)+i]; 
-              dq4_des[i] = input_params[14+7*(N+1)+i];
+              //q1_des[i] = input_params[14+Nz*i];
+              q2_des[i] = input_params[14+Nz*i];
+              q3_des[i] = input_params[15+Nz*i]; 
+              q4_des[i] = input_params[16+Nz*i]; 
+              //dq1_des[i] = input_params[14+Nz*(N+1)+Nz*i]; 
+              dq2_des[i] = input_params[17+Nz*(N+1)+Nz*i]; 
+              dq3_des[i] = input_params[18+Nz*(N+1)+Nz*i]; 
+              dq4_des[i] = input_params[19+Nz*(N+1)+Nz*i];
 
+              pc.printf("q2_des idx %i: %f\n",i,q2_des[i]);
             //   if(i < N){
             //     tau2_des[i] = input_params[14+8*(N+1)+i];
             //     tau3_des[i] = input_params[14+6*(N+1)+N+i];
             //     tau4_des[i] = input_params[14+6*(N+1)+2*N+i];
             //   }    
             }
-            
             
             // Attach current loop interrupt
             currentLoop.attach_us(CurrentLoop,current_control_period_us);
@@ -239,12 +241,14 @@ int main(void) {
             encoderC.reset();
             encoderD.reset();
 
-            motorShield.motorAWrite(duty_max, 1); //turn motor A off
+            motorShield.motorAWrite(0, 0); //turn motor A off
             motorShield.motorBWrite(0, 0); //turn motor B off
             motorShield.motorCWrite(0, 0); //turn motor C off
+            pc.printf("Initialization complete\n");
                          
             // Run experiment
             while( t.read() < start_period + traj_period + end_period) { 
+                pc.printf("Control loop\n");
                 // Read encoders to get motor states
                 angle2 = encoderA.getPulses() *PULSE_TO_RAD + angle2_init;       
                 velocity2 = encoderA.getVelocity() * PULSE_TO_RAD;
@@ -328,13 +332,15 @@ int main(void) {
                 // float dth2_des = (1.0f/dd) * ( -Jy_th1*vDesFoot[0] + Jx_th1*vDesFoot[1] );
         
                 // Calculate error variables
-                int t_idx = (t.read()-start_period)/dt; // current timestep (between 0 and N?)
+                int t_idx = (teff)/dt; // current timestep (between 0 and N?)
+                if(t_idx > N) t_idx = N ; // ensure t_idx <=N
                 float e_q2 = q2_des[t_idx] - q2;
                 float e_q3 = q3_des[t_idx] - q3;
                 float e_q4 = q4_des[t_idx] - q4;
                 float e_dq2 = dq2_des[t_idx] - dq2;
                 float e_dq3 = dq3_des[t_idx] - dq3;
                 float e_dq4 = dq4_des[t_idx] - dq4;
+                pc.printf("Computed errors:\n t: %f \n Idx: %i\n q2: %f\n q2_des: %f\n", t.read(), t_idx, q2,q2_des[t_idx]);
         
         
                 // Joint impedance
@@ -346,11 +352,11 @@ int main(void) {
                 float tau3 = K_3*e_q3 + D_3*e_dq3; // + tau3_des[t_idx]          
                 float tau4 = K_4*e_q4 + D_4*e_dq4; // + tau4_des[t_idx]
 
-                current2 = k_t*tau2;
-                current3 = k_t*tau3;          
-                current4 = k_t*tau4;                         
+                current_des2 = k_t*tau2;
+                current_des3 = k_t*tau3;          
+                current_des4 = k_t*tau4;                         
 
-
+                pc.printf("Current 2 %f\n", current_des2);
                 
 
 
@@ -360,34 +366,35 @@ int main(void) {
                 output_data[0] = t.read();
                 // body data
                 output_data[1] = angle1;
-                output_data[2] = q1_des[t_idx];
-                output_data[3] = velocity1; 
-                output_data[4] = dq1_des[t_idx]; 
+                //output_data[2] = q1_des[t_idx];
+                output_data[2] = velocity1; 
+                //output_data[4] = dq1_des[t_idx]; 
                 // hip data
-                output_data[5] = angle2;
-                output_data[6] = q2_des[t_idx];
-                output_data[7] = velocity2; 
-                output_data[8] = dq2_des[t_idx];
+                output_data[3] = angle2;
+                output_data[4] = q2_des[t_idx];
+                output_data[5] = velocity2; 
+                output_data[6] = dq2_des[t_idx];
                 // foot data
-                output_data[9] = angle3;
-                output_data[10] = q3_des[t_idx];
-                output_data[11] = velocity3; 
-                output_data[12] = dq3_des[t_idx];
+                output_data[7] = angle3;
+                output_data[8] = q3_des[t_idx];
+                output_data[9] = velocity3; 
+                output_data[10] = dq3_des[t_idx];
                 // arm data
-                output_data[13] = angle4;
-                output_data[14] = q4_des[t_idx];
-                output_data[15] = velocity4; 
-                output_data[16] = dq4_des[t_idx];
+                output_data[11] = angle4;
+                output_data[12] = q4_des[t_idx];
+                output_data[13] = velocity4; 
+                output_data[14] = dq4_des[t_idx];
                 // control inputs
-                output_data[17] = tau2; 
-                output_data[18] = tau3; 
-                output_data[19] = tau4;
+                output_data[15] = tau2; 
+                output_data[16] = tau3; 
+                output_data[17] = tau4;
                 // output_data[20] = tau2_des[t_idx]; 
                 // output_data[21] = tau3_des[t_idx]; 
                 // output_data[22] = tau4_des[t_idx]; 
                 
                 // Send data to MATLAB
                 server.sendData(output_data,NUM_OUTPUTS);
+                pc.printf("Output sent\n\n");
 
                 wait_us(impedance_control_period_us);   
             }
