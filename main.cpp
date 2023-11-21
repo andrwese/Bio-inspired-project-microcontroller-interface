@@ -5,14 +5,18 @@
 #include "QEI.h"
 #include "MotorShield.h" 
 #include "HardwareSetup.h"
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 
-#define dt  0.01        // length of timestep
-#define N   18          // number of timesteps
+#define dt  0.03        // length of timestep
+#define N   16          // number of timesteps
 
 #define Nz 3           // number of controllable generalized coordinates (q2 - q4)
-#define NUM_INPUTS 14 + Nz*2*(N+1) //+ 3*N)       
-#define NUM_OUTPUTS 18 // 23
+#define NUM_INPUTS 14 + 6*(N+1)     
+#define NUM_OUTPUTS 18 
 #define PULSE_TO_RAD (2.0f*3.14159f / 1200.0f)
 
 // Initializations
@@ -72,7 +76,7 @@ const float l_AE=.096;              // length of arm link
 
 // Timing parameters
 float current_control_period_us = 200.0f;     // 5kHz current control loop
-float impedance_control_period_us = 100.0f;  // 100Hz impedance control loop        ---- verify that this is possible ----
+float impedance_control_period_us = 1/dt;  // 100Hz impedance control loop        ---- verify that this is possible ----
 float start_period, traj_period, end_period;
 
 // Control parameters
@@ -164,22 +168,51 @@ void CurrentLoop() {
     prev_current_des4 = current_des4; 
 }
 
+void readTrajectoriesFromFile(std::string filename, float (&array1)[N+1], float (&array2)[N+1], float (&array3)[N+1]){
+    // populates the three float arrays by reading out the tree first rows of the file
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        pc.printf("Error opening file");
+        return;
+    }
+    std::string line;
+    const int ROWS = 4;
+    const int COLS = N+1;
 
+    int row = 1;
+
+    while (std::getline(file, line) && row < ROWS) {
+        std::stringstream ss(line);
+        std::string cell;
+        int col = 0;
+
+        while (std::getline(ss, cell, ',') && col < COLS) {
+            // Convert the cell value to a float and populate the arrays
+            if (row == 1) {
+                array1[col] = std::stof(cell);
+            } else if (row == 2) {
+                array2[col] = std::stof(cell);
+            } else if (row == 3) {
+                array3[col] = std::stof(cell);
+            }
+
+            col++;
+        }
+
+        row++;
+    }
+
+}
 
 int main(void) {
     pc.baud(115200);
     // Object for desired trajectory of all angles
-    //float q1_des[N+1];
     float q2_des[N+1];
     float q3_des[N+1];
     float q4_des[N+1];
-    //float dq1_des[N+1];
     float dq2_des[N+1];
     float dq3_des[N+1];
     float dq4_des[N+1];
-    // float tau2_des[N];
-    // float tau3_des[N];
-    // float tau4_des[N];
     
     // Link the terminal with our server and start it up
     server.attachTerminal(pc);
@@ -213,22 +246,23 @@ int main(void) {
           
             // Get desired angles and angular velocities
             for(int i = 0; i<N+1;i++) {
-              //q1_des[i] = input_params[14+Nz*i];
               q2_des[i] = input_params[14+Nz*i];
               q3_des[i] = input_params[15+Nz*i]; 
               q4_des[i] = input_params[16+Nz*i]; 
-              //dq1_des[i] = input_params[14+Nz*(N+1)+Nz*i]; 
               dq2_des[i] = input_params[17+Nz*(N+1)+Nz*i]; 
               dq3_des[i] = input_params[18+Nz*(N+1)+Nz*i]; 
               dq4_des[i] = input_params[19+Nz*(N+1)+Nz*i];
 
-              pc.printf("q2_des idx %i: %f\n",i,q2_des[i]);
-            //   if(i < N){
-            //     tau2_des[i] = input_params[14+8*(N+1)+i];
-            //     tau3_des[i] = input_params[14+6*(N+1)+N+i];
-            //     tau4_des[i] = input_params[14+6*(N+1)+2*N+i];
-            //   }    
+              pc.printf("q2_des idx %i: %f\n",i,q2_des[i]);   
             }
+            // readTrajectoriesFromFile("./optimal_angles.csv",q2_des, q3_des, q4_des);
+            // readTrajectoriesFromFile("./optimal_angular_velocities.csv",dq2_des, dq3_des, dq4_des);
+
+            for (int i=0;i<N+1;i++){
+                pc.printf("q4 des at %i: %f \n",i,q4_des[i]);
+
+            }
+
             
             // Attach current loop interrupt
             currentLoop.attach_us(CurrentLoop,current_control_period_us);
@@ -273,17 +307,10 @@ int main(void) {
                 const float dq3= velocity3;
                 const float dq4= velocity4;
  
-                
-                                
-                // Calculate the forward kinematics (position and velocity)
-                // float xFoot = l_AB*sin(q1)+l_OA*sin(q1)+l_BC*sin(q1+q2)+l_CD*sin(q1+q2+q3+q4);
-                // float zFoot = -l_AB*cos(q1)-l_OA*cos(q1)-l_BC*cos(q1+q2)-l_CD*cos(q1+q2+q3+q4);
-                // float dxFoot = dq2*(l_BC*cos(q1+q2)+l_CD*cos(q1+q2+q3))+dq3*l_CD*cos(q1+q2+q3)+dq1*(l_BC*cos(q1+q2)+l_CD*cos(q1+q2+q3)+l_AB*cos(q1)+l_OA*cos(q1));
-                // float dzFoot = dq2*(l_BC*sin(q1+q2)+l_CD*sin(q1+q2+q3))+dq3*l_CD*sin(q1+q2+q3)+dq1*(l_BC*sin(q1+q2)+l_CD*sin(q1+q2+q3)+l_AB*sin(q1)+l_OA*sin(q1));       
 
                 // Set gains based on buffer and traj times, then calculate desired x,y from Bezier trajectory at current time if necessary
                 float teff  = 0;
-                float vMult = 0;
+
                 if (t < start_period) {
                     if (K_2 > 0 || K_3 > 0 || K_4 > 0) {
                         K_2 = 1; // for joint space control, set these to 1; 
@@ -303,33 +330,13 @@ int main(void) {
                     D_3                        = input_params[11];      // Foot damping N/(m/s)
                     D_4                        = input_params[12];      // Foot damping N/(m/s)
                     teff = (t-start_period);
-                    vMult = 1;
+
                 }
                 else {
                     teff = traj_period;
-                    vMult = 0;
+
                 }
                 
-                // Get desired foot positions and velocities
-                // float rDesFoot[2], vDesFoot[2];
-                // rDesFoot_bez.evaluate(teff/traj_period,rDesFoot);
-                // rDesFoot_bez.evaluateDerivative(teff/traj_period,vDesFoot);
-                // vDesFoot[0]/=traj_period;
-                // vDesFoot[1]/=traj_period;
-                // vDesFoot[0]*=vMult;
-                // vDesFoot[1]*=vMult;
-                
-                // Calculate the inverse kinematics (joint positions and velocities) for desired joint angles              
-                // float xFoot_inv = -rDesFoot[0];
-                // float yFoot_inv = rDesFoot[1];                
-                // float l_OE = sqrt( (pow(xFoot_inv,2) + pow(yFoot_inv,2)) );
-                // float alpha = abs(acos( (pow(l_OE,2) - pow(l_AC,2) - pow((l_OB+l_DE),2))/(-2.0f*l_AC*(l_OB+l_DE)) ));
-                // float th2_des = -(3.14159f - alpha); 
-                // float th1_des = -((3.14159f/2.0f) + atan2(yFoot_inv,xFoot_inv) - abs(asin( (l_AC/l_OE)*sin(alpha) )));
-                
-                // float dd = (Jx_th1*Jy_th2 - Jx_th2*Jy_th1);
-                // float dth1_des = (1.0f/dd) * (  Jy_th2*vDesFoot[0] - Jx_th2*vDesFoot[1] );
-                // float dth2_des = (1.0f/dd) * ( -Jy_th1*vDesFoot[0] + Jx_th1*vDesFoot[1] );
         
                 // Calculate error variables
                 int t_idx = (teff)/dt; // current timestep (between 0 and N?)
@@ -344,15 +351,11 @@ int main(void) {
         
         
                 // Joint impedance
-                // Note: Be careful with signs now that you have non-zero desired angles!
-                // Your equations should be of the form i_d = K1*(q1_d - q1) + D1*(dq1_d - dq1)
+                float tau2 = K_2*e_q2 + D_2*e_dq2;           
+                float tau3 = K_3*e_q3 + D_3*e_dq3;           
+                float tau4 = K_4*e_q4 + D_4*e_dq4; 
 
-                // TODO ta med feed forward torques, align tidsstegene
-                float tau2 = K_2*e_q2 + D_2*e_dq2; // + tau2_des[t_idx]          
-                float tau3 = K_3*e_q3 + D_3*e_dq3; // + tau3_des[t_idx]          
-                float tau4 = K_4*e_q4 + D_4*e_dq4; // + tau4_des[t_idx]
-
-                current_des2 = k_t*tau2;
+                current_des2 = -k_t*tau2; // opposite sign bc hip motor is located on other side of body compared to leg/shoulder motors
                 current_des3 = k_t*tau3;          
                 current_des4 = k_t*tau4;                         
 
@@ -364,33 +367,36 @@ int main(void) {
                 float output_data[NUM_OUTPUTS];
                 // current time
                 output_data[0] = t.read();
+
                 // body data
                 output_data[1] = angle1;
                 //output_data[2] = q1_des[t_idx];
                 output_data[2] = velocity1; 
                 //output_data[4] = dq1_des[t_idx]; 
+
                 // hip data
                 output_data[3] = angle2;
                 output_data[4] = q2_des[t_idx];
                 output_data[5] = velocity2; 
                 output_data[6] = dq2_des[t_idx];
+
                 // foot data
                 output_data[7] = angle3;
                 output_data[8] = q3_des[t_idx];
                 output_data[9] = velocity3; 
                 output_data[10] = dq3_des[t_idx];
+
                 // arm data
                 output_data[11] = angle4;
                 output_data[12] = q4_des[t_idx];
                 output_data[13] = velocity4; 
                 output_data[14] = dq4_des[t_idx];
+
                 // control inputs
                 output_data[15] = tau2; 
                 output_data[16] = tau3; 
                 output_data[17] = tau4;
-                // output_data[20] = tau2_des[t_idx]; 
-                // output_data[21] = tau3_des[t_idx]; 
-                // output_data[22] = tau4_des[t_idx]; 
+                
                 
                 // Send data to MATLAB
                 server.sendData(output_data,NUM_OUTPUTS);
