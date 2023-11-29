@@ -76,7 +76,7 @@ const float l_AE=.096;              // length of arm link
 
 // Timing parameters
 float current_control_period_us = 200.0f;     // 5kHz current control loop
-float impedance_control_period_us = 1/dt;  // 100Hz impedance control loop        ---- verify that this is possible ----
+float impedance_control_period_us = dt*1e6;  // 100Hz impedance control loop        ---- verify that this is possible ----
 float start_period, traj_period, end_period;
 
 // Control parameters
@@ -280,8 +280,10 @@ int main(void) {
             motorShield.motorCWrite(0, 0); //turn motor C off
             pc.printf("Initialization complete\n");
                          
+            float init_time = t.read();
             // Run experiment
             while( t.read() < start_period + traj_period + end_period) { 
+                float t_start_loop = t.read();
                 pc.printf("Control loop\n");
                 // Read encoders to get motor states
                 angle2 = encoderA.getPulses() *PULSE_TO_RAD + angle2_init;       
@@ -347,7 +349,7 @@ int main(void) {
                 float e_dq2 = dq2_des[t_idx] - dq2;
                 float e_dq3 = dq3_des[t_idx] - dq3;
                 float e_dq4 = dq4_des[t_idx] - dq4;
-                pc.printf("Computed errors:\n t: %f \n Idx: %i\n q2: %f\n q2_des: %f\n", t.read(), t_idx, q2,q2_des[t_idx]);
+                pc.printf("Computed errors:\nt: %f \nIdx: %i\nq2: %f\nq2_des: %f\n", t.read()-init_time, t_idx, q2,q2_des[t_idx]);
         
         
                 // Joint impedance
@@ -366,7 +368,7 @@ int main(void) {
                 // Form output to send to MATLAB     
                 float output_data[NUM_OUTPUTS];
                 // current time
-                output_data[0] = t.read();
+                output_data[0] = t.read()-init_time;
 
                 // body data
                 output_data[1] = angle1;
@@ -402,7 +404,11 @@ int main(void) {
                 server.sendData(output_data,NUM_OUTPUTS);
                 pc.printf("Output sent\n\n");
 
-                wait_us(impedance_control_period_us);   
+                float t_end_loop = t.read();
+
+                float wait_time = impedance_control_period_us-(t_end_loop-t_start_loop)*1e6;
+
+                wait_us(wait_time);   
             }
             
             // Cleanup after experiment
